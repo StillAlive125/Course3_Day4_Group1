@@ -90,3 +90,48 @@ paf2chain --input data/ankur_asm_to_ref.paf > data/ankur_isolate_to_ref.chain
 CrossMap vcf data/ankur_isolate_to_ref.chain data/data_ankur/medaka/medaka.vcf data/data_ankur/5scaff2medaka_consensus.fasta data/ankur_isolate_centric.vcf
 ```
 
+```{r}
+library("tidyverse")
+library("Gviz")
+library("GenomicFeatures")
+library("rtracklayer")
+library("Biostrings")
+library("GO.db")
+library("AnnotationDbi")
+library("ggVennDiagram")
+```
+```{r}
+library(Gviz)
+library(rtracklayer)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(VariantAnnotation)
+
+options(ucscChromosomeNames=FALSE)
+
+# 1. Load Isolate Annotations (Day 1) and Lifted VCF (Today)
+isolate_txdb <- makeTxDbFromGFF("data/data_ankur/ankur_Saccharomyces_cerevisiae.gff3")
+gr_lifted <- readVcf("data/Ankur/ankur_isolate_centric.vcf")
+gr_vcf <- rowRanges(gr_lifted)
+
+# 2. Make names consistent
+seqlevels(gr_vcf) <- sub("contig", "scaffold", seqlevels(gr_vcf))
+chrom <- "scaffold_322"
+
+# 2. Create Tracks
+it_track <- GeneRegionTrack(isolate_txdb,
+                            name = "Isolate Genes",
+                            chromosome = chrom)
+
+iv_track <- AnnotationTrack(gr_vcf,
+                            name = "Ref-based SNPs",
+                            fill = "red",
+                            chromosome = chrom)
+# 3. Plot the Synthesis
+plotTracks(list(GenomeAxisTrack(), it_track, iv_track),
+           chromosome = chrom,
+           from = 1, to = 10000,
+           main = "The Isolate Map: Integrated Structure & Function")
+```
+
+
