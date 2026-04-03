@@ -77,3 +77,12 @@ medaka_variant -i data_ankur/ERR1539006.fastq -r data_ankur/S288C_UCSC.fna -t 8
 snpeff R64-1-1.99 data/data_ankur/medaka/medaka.vcf > data/data_ankur/medaka/snpeff_medaka.annotateds.vcf
 ```
 
+```{bash}
+# 1. Align Assembly to Reference
+minimap2 -cx asm5 data/data_ankur/reference_snpeff_S288C.fna data/data_ankur/5scaff2medaka_consensus.fasta > data/ankur_asm_to_ref.paf
+
+# 2. Convert PAF map into a .chain dictionary
+# conda install paf2chain
+paf2chain --input data/ankur_asm_to_ref.paf > data/ankur_isolate_to_ref.chain
+```
+
