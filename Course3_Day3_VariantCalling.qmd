@@ -1,0 +1,249 @@
+---
+title: "Course3_Day3_VariantCalling"
+format: html
+editor: visual
+---
+
+# **Pre-Lab** 
+
+### **1. R Environment**
+
+```{r}
+#| echo: false
+
+
+
+pkg_list <- c("VariantAnnotation", "GenomicFeatures", "GenomicRanges", "Gviz")
+
+invisible(lapply(pkg_list, function(pkg) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    message(paste("Installing", pkg, "..."))
+  
+    if (!requireNamespace("BiocManager", quietly = TRUE)) {
+      install.packages("BiocManager")
+    }
+    
+    BiocManager::install(pkg, update = FALSE, ask = FALSE)
+    library(pkg, character.only = TRUE)
+    
+  } else {
+    message(paste(pkg, "is already installed and loaded."))
+  }
+}))
+```
+
+### **2. Data Management**
+
+```{r}
+#| echo: false
+
+
+# NCBI URL for the S. cerevisiae S288C Reference GFF
+gff_url <- "https://ftp.ncbi.nlm.nih.gov/genomes/refseq/fungi/Saccharomyces_cerevisiae/latest_assembly_versions/GCF_000146045.2_R64/GCF_000146045.2_R64_genomic.gff.gz"
+dest_compressed <- "data/S288C_reference.gff.gz"
+
+# Download the file using wget
+message("Downloading reference GFF...")
+download.file(url = gff_url, destfile = dest_compressed, method = "wget")
+```
+
+```{bash}
+#| echo: false
+
+
+wget -nc ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR153/006/ERR1539006/ERR1539006.fastq.gz
+
+
+
+# Run this in your RStudio Terminal
+gunzip -c data/S288C_reference.gff.gz > data/S288C_reference.gff
+```
+
+### **3. Software Check**
+
+```{bash}
+#| echo : False
+
+# Create a dedicated environment with all necessary tools
+# CrossMap is included for tomorrow's coordinate liftover
+conda create -n variant_env -c bioconda -c conda-forge \
+  minimap2 \
+  samtools \
+  bedtools \
+  bcftools \
+  crossmap \
+  htslib
+
+conda activate variant_env
+```
+
+# **Phase 2: Identifying Genetic Variation**
+
+### **Step 1: Alignment (The Mapº**
+
+```{bash}
+#| echo: false
+
+
+# 1. Map reads to Reference
+minimap2 -ax map-ont data/chr1.fasta data/ERR1539006.fastq | \
+  samtools sort -o data/aligned_chr1.bam
+
+# 2. Index the BAM (creates .bam.bai)
+samtools index data/aligned_chr1.bam
+```
+
+S**tep 2: Variant Calling (The Judge)**
+
+```{bash}
+#| echo: false
+
+
+conda deactivate
+# Ensure medaka_env is active
+conda activate medaka_env
+
+
+medaka_variant -i data/ERR1539006.fastq -r data/chr1.fasta -t 8
+```
+
+### **Step 3: The Link**
+
+```{bash}
+#| echo: false
+
+
+#1 Create the gene only GFF
+awk 'BEGIN{FS=OFS="\t"} $0 ~ /^#/ || $3=="gene"' \
+data/S288C_reference.gff > data/S288C_genes.gff
+
+#2 Check for overlaps between Variants (A) and Genes (B)
+# Ensure variant_env is active
+onda deactivate
+conda activate variant_env
+# We use -a (the variant file) and -b (the gene feature file)
+bedtools intersect \
+  -a data/variants_against_chr1_medaka.vcf \
+  -b data/S288C_genes.gff \
+  -header > data/variants_in_genes.vcf
+```
+
+# **Phase 3: The “We Do” Visualization (The Gviz Stack)**
+
+### **1. Data Ingestion**
+
+```{r}
+
+vcf <- readVcf("data/variants_in_genes.vcf")
+gr_variants <- rowRanges(vcf)
+gr_variants <- gr_variants[fixed(vcf)$FILTER == "PASS"]
+gr_variants <- gr_variants[seqnames(gr_variants) == "NC_001133.9"]
+
+```
+
+### **2. Track Construction**
+
+```{r}
+
+# Build the Gene Blueprint from the GFF
+txdb_ref <- makeTxDbFromGFF("data/S288C_reference.gff", format = "gff3")
+
+gr_genes <- genes(txdb_ref)
+gr_genes <- gr_genes[seqnames(gr_genes) == "NC_001133.9"]
+
+gene_names <- mcols(gr_genes)$gene_id
+
+names(gr_genes) <- gene_names
+mcols(gr_genes)$gene <- names(gr_genes)   
+
+options(ucscChromosomeNames=FALSE)
+
+gene_track <- GeneRegionTrack(
+  gr_genes,
+  chromosome = "NC_001133.9",
+  name = "Gene Model",
+  transcriptAnnotation = "gene",
+  showID = TRUE
+)
+
+# Build the Delta Track (Your Variants)
+variant_track <- AnnotationTrack(gr_variants,
+                                chromosome = "NC_001133.9",
+                                name = "Variants",
+                                shape = "box",
+                                fill  = "red"
+)
+
+# Build the Evidence Track (Your Reads)
+aln_track <- AlignmentsTrack("data/aligned_chr1.bam",
+                             chromosome = "NC_001133.9",
+                             isPaired = FALSE, 
+                             name = "Read Coverage")
+```
+
+### **3. The Reveal**
+
+```{r}
+plotTracks(list(GenomeAxisTrack(), gene_track, variant_track, aln_track),
+           from = 30000, to = 80000, 
+           chromosome = "NC_001133.9",
+           main = "Variant Verification: Chr 1 Window")
+```
+
+# For tomorrow
+
+### **Step 1: Alignment**
+
+```{bash}
+# activate varient environment
+conda activate variant_env
+
+
+# Aligning the reads aginst entire genome
+minimap2 -ax map-ont data/Krish_data/S288C_UCSC.fna data/Krish_data/ERR1539006.fastq | \
+  samtools sort -o data/Krish_data/aligned_refrence_genome_romen.bam
+
+# Index the BAM (creates .bam.bai)
+samtools index data/Krish_data/aligned_refrence_genome_romen.bam
+```
+
+### **Step 2: Variant Calling**
+
+```{r}
+file <- Biostrings::readDNAStringSet("Data/Krish_data/S288C_UCSC.fna")
+names(file) <- stringr::str_remove(names(file),"chr")
+names(file) <- stringr::str_replace(names(file),"M", "Mito")
+names(file)
+
+Biostrings::writeXStringSet(file, "Data/Krish_data/S288C_UCSC_roman.fna") 
+```
+
+```{bash}
+# Install snpeff toll in varient enviornment
+conda install -c bioconda -c conda-forge snpeff 
+
+# Deactivate the current enviornment
+conda deactivate
+# Ensure medaka_env is active
+conda activate medaka_env
+
+
+medaka_variant -i data/Krish_data/ERR1539006.fastq -r data/Krish_data/S288C_UCSC_roman.fna -t 8 
+```
+
+```{}
+```
+
+### **Step 3: The Link**
+
+```{bash}
+# Check for overlaps between Variants (A) and Genes (B)
+# Ensure variant_env is active
+conda deactivate
+conda activate variant_env
+# We use -a (the variant file) and -b (the gene feature file)
+bedtools intersect \
+  -a data/Krish_data/variants_against_genome_medaka.vcf \
+  -b data/Krish_data/S288C_genes.gff \
+  -header > data/Krish_data/variants_in_genes_of_genome.vcf
+```
