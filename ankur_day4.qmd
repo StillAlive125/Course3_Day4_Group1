@@ -130,7 +130,7 @@ iv_track <- AnnotationTrack(gr_vcf,
 # 3. Plot the Synthesis
 plotTracks(list(GenomeAxisTrack(), it_track, iv_track),
            chromosome = chrom,
-           from = 1, to = 10000,
+           from = 1000, to = 2500,
            main = "The Isolate Map: Integrated Structure & Function")
 ```
 
