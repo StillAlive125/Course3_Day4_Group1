@@ -86,3 +86,7 @@ minimap2 -cx asm5 data/data_ankur/reference_snpeff_S288C.fna data/data_ankur/5sc
 paf2chain --input data/ankur_asm_to_ref.paf > data/ankur_isolate_to_ref.chain
 ```
 
+```{bash}
+CrossMap vcf data/ankur_isolate_to_ref.chain data/data_ankur/medaka/medaka.vcf data/data_ankur/5scaff2medaka_consensus.fasta data/ankur_isolate_centric.vcf
+```
+
