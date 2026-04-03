@@ -1,0 +1,79 @@
+---
+title: "day4"
+format: html
+---
+
+what I am doing is alingning is aligning all reads not just again chr1 but again all
+```{bash}
+# 1. Map reads to Reference
+minimap2 -ax map-ont reference_snpeff_S288C.fna ERR1539006.fastq | \
+  samtools sort -o snpeff_reference_genome_aligned.bam
+
+# 2. Index the BAM (creates .bam.bai)
+samtools index data_Ankur/snpeff_reference_genome_aligned.bam
+```
+
+```{r}
+file <- Biostrings::readDNAStringSet("S288C_UCSC.fna")
+names(file) <- stringr::str_remove(names(file),"chr")
+names(file)
+names(file) <- stringr::str_replace(names(file),"M", "Mito")
+Biostrings::writeXStringSet(file, "reference_snpeff_S288C.fna")
+```
+
+
+```{bash}
+medaka_variant -i ERR1539006.fastq -r reference_snpeff_S288C.fna -t 8
+```
+
+```{r}
+# 1. Uncompress and Read the raw NCBI file as simple text
+con <- "GCF_000146045.2_R64_genomic.test.fna"
+ygen <- readLines(con)
+
+close(con)  # <-- this is for closing the connection to the gz file, saves on resources. 
+
+
+
+# 2. Define the new UCSC-style headers (chrI through chrXVI + chrM)
+new_headers <- c(paste0(">chr", as.roman(1:16)), ">chrM")
+
+# 3. Find and Replace
+header_lines <- grep(">", ygen)
+#Look at the header for chromosome 1
+header_lines[1]
+
+# Safety Check: Yeast has 16 nuclear chromosomes + 1 mitochondrial
+if(length(header_lines) == 17) {
+  ygen[header_lines] <- new_headers
+  writeLines(ygen, "S288C_UCSC.fna")
+  message("SUCCESS: Reference renamed to UCSC standards.")
+} else {
+  stop("Error: Chromosome count mismatch! Check your input file.")
+}
+```
+
+
+```{bash}
+#1 Create the gene only GFF
+awk 'BEGIN{FS=OFS="\t"} $0 ~ /^#/ || $3=="gene"' \
+S288C_reference.gff > S288C_genes.gff
+
+#2 Check for overlaps between Variants (A) and Genes (B)
+# Ensure variant_env is active
+# We use -a (the variant file) and -b (the gene feature file)
+bedtools intersect \
+  -a medaka/medaka.vcf \
+  -b S288C_genes.gff \
+  -header > variants_in_genes.vcf
+```
+
+```{bash}
+medaka_variant -i data_ankur/ERR1539006.fastq -r data_ankur/S288C_UCSC.fna -t 8
+```
+
+```{bash}
+# Use the S. cerevisiae R64-1-1.99 database
+snpeff R64-1-1.99 data/data_ankur/medaka/medaka.vcf > data/data_ankur/medaka/snpeff_medaka.annotateds.vcf
+```
+
